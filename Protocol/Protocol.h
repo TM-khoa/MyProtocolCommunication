@@ -12,7 +12,6 @@
 #include "CRC16.h"
 #include <string>
 #include <cstring>
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "Protocol.h": "c",
+        "stdint.h": "c",
+        "stdio.h": "c",
+        "cstdint": "c"
+    }
+}

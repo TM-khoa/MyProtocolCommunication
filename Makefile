@@ -44,7 +44,8 @@ MyProtocol: $(OBJ_FILES)
 
 .PHONY: clean	
 clean:
-	@rm $(OBJ_DIR)/*
+	@rm -r $(OBJ_DIR)
+	@rm *.exe
 print-%:
 # $@ lúc ban đầu sẽ là print- + đối số truyền vào, sau đó thay thế print- thành NULL 
 # -> chỉ còn lại đối số truyền vào (ví dụ $@ = print-a -> $@ = a)

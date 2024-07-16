@@ -65,7 +65,8 @@ typedef struct ArgumentOfProtocolList_t {
 
 #define PROTOCOL_TOTAL_LENGTH(_DATASIZE_) (PROTOCOL_ID_FIELD_SIZE + PROTOCOL_TOTAL_LENGTH_FIELD_SIZE + PROTOCOL_REQUEST_DATA_FIELD_SIZE + (_DATASIZE_) + PROTOCOL_CRC_FIELD_SIZE)
 
-typedef void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool requestData);
+// input buffer được sử dụng khi đầu ra dùng cấp phát bộ nhớ động, không cần thiết phải sử dụng nếu đã đăng ký đối số
+typedef void (*pProtocolCpltCallback)(FrameData fd);
 typedef void (*pProtocolErrorCallback)(ProtocolErrorCode err);
 
 class Protocol {
@@ -240,7 +241,7 @@ class Protocol {
 		 * @param protocolID Mã định dạng khung truyền
 		 * @return FrameData
 		 */
-		FrameData MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID, bool requestData) {
+		FrameData MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID) {
 			if (PROTOCOL_TOTAL_LENGTH(sizeOfPayload) > sizeOfOutputBuffer)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
 			if (payload == NULL || outputBuffer == NULL)
@@ -274,7 +275,13 @@ class Protocol {
 			return _fd.totalLength;
 		}
 
-		void DecodeFrameAndCheckCRC() {
+		/**
+		 * @brief Phân tích khung truyền từ bộ đệm đầu vào và gọi tới hàm callback đã được đăng ký
+		 * @param inputBuffer con trỏ trỏ tới bộ đệm chứa khung truyền
+		 * @param sizeOfBuffer kích thước khung truyền
+         * return FrameData
+		 */
+		FrameData DecodeFrameAndCheckCRC() {
 			if (_pRxBuffer == NULL)
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
 			_fd.payloadLength = PROTOCOL_PAYLOAD_LENGTH(_fd.totalLength);
@@ -286,51 +293,21 @@ class Protocol {
 			if (!IsPassCRC(_pRxBuffer))
 				JumpToError(PROTOCOL_ERR_CRC_FAIL);
 			if (_pProlCallback != NULL)
-				_pProlCallback(NULL, 0, _fd.protocolID, _fd.requestData);
+				_pProlCallback(_fd);
 			else
 				JumpToError(PROTOCOL_ERR_NULL_CALLBACK_FUNCTION);
-		}
-
-		/**
-		 * @brief Phân tích khung truyền từ bộ đệm đầu vào và gọi tới hàm callback đã được đăng ký
-		 * @param inputBuffer con trỏ trỏ tới bộ đệm chứa khung truyền
-		 * @param sizeOfBuffer kích thước khung truyền
-		 */
-		void DecodeFrameAndCheckCRC(uint8_t *inputBuffer, uint16_t lengthOfFrameData) {
-			if (inputBuffer == NULL)
-				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
-			_fd.totalLength = *(inputBuffer + 0);
-			_fd.payloadLength = PROTOCOL_PAYLOAD_LENGTH(_fd.totalLength);
-			if (PROTOCOL_TOTAL_LENGTH(_fd.payloadLength) != lengthOfFrameData)
-				JumpToError(PROTOCOL_ERR_FRAME_ERROR);
-			_fd.protocolID = (ProtocolID) *(inputBuffer + PROTOCOL_ID_FIELD);
-			_fd.requestData = (bool) *(inputBuffer + PROTOCOL_REQUEST_DATA_FIELD);
-			uint32_t crcNibbleByteMSB = *(inputBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength)) << 8;
-			uint32_t crcNibbleByteLSB = *(inputBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength) + 1);
-			_fd.crc16 = crcNibbleByteMSB | crcNibbleByteLSB;
-			if (!IsPassCRC(inputBuffer))
-				JumpToError(PROTOCOL_ERR_CRC_FAIL);
-			if (_pProlCallback != NULL)
-				_pProlCallback(inputBuffer, lengthOfFrameData, _fd.protocolID, _fd.requestData);
-			else
-				JumpToError(PROTOCOL_ERR_NULL_CALLBACK_FUNCTION);
+            return _fd;
 		}
 
 		/**
 		 * @brief Lấy thông tin từ FrameData
 		 * @return FrameData chứa thông tin nhận được
 		 */
-		FrameData GetFrameDataInfo() {
-			return _fd;
-		}
+		FrameData GetFrameDataInfo() {return _fd;}
 
-		void FrameData_SetPayloadLengthData(uint16_t payloadLength) {
-			_fd.payloadLength = payloadLength;
-		}
+		void SetTotalLength(uint16_t totalLength) {_fd.totalLength = totalLength;}
 
-		ArgumentOfProtocolList_t GetArgumentID(ProtocolID id) {
-			return argID[id];
-		}
+		ArgumentOfProtocolList_t GetArgumentID(ProtocolID id) {return argID[id];}
 
 		void ResetFrame() {
 			FrameData fdTemp;
@@ -346,6 +323,11 @@ class Protocol {
 			_pRxBuffer = pRxBuffer;
 			_rxBufSize = rxBufferSize;
 		}
+        
+        uint16_t GetTxBufferSize() {return _txBufSize;}
+        uint8_t* GetAddressTxBuffer (){return _pTxBuffer;}
+        uint8_t* GetAddressRxBuffer (){return _pRxBuffer;}
+        uint16_t GetRxBufferSize() {return _rxBufSize;}
 
 		void RegisterArgument(void *arg, uint8_t sizeOfArgument, ProtocolID protocolID) {
 			if (sizeOfArgument == 0)
@@ -354,7 +336,7 @@ class Protocol {
 			argID[protocolID].sizeArgument = sizeOfArgument;
 		}
 
-		void RegisterReceivedCallbackEvent(void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool requestData)) {
+		void RegisterReceivedCallbackEvent(void (*pProtocolCpltCallback)(FrameData fd)) {
 			_pProlCallback = pProtocolCpltCallback;
 		}
 

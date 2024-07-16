@@ -65,7 +65,7 @@ typedef struct ArgumentOfProtocolList_t {
 
 #define PROTOCOL_TOTAL_LENGTH(_DATASIZE_) (PROTOCOL_ID_FIELD_SIZE + PROTOCOL_TOTAL_LENGTH_FIELD_SIZE + PROTOCOL_REQUEST_DATA_FIELD_SIZE + (_DATASIZE_) + PROTOCOL_CRC_FIELD_SIZE)
 
-typedef void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool getOrSet);
+typedef void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool requestData);
 typedef void (*pProtocolErrorCallback)(ProtocolErrorCode err);
 
 class Protocol {
@@ -354,7 +354,7 @@ class Protocol {
 			argID[protocolID].sizeArgument = sizeOfArgument;
 		}
 
-		void RegisterReceivedCallbackEvent(void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool getOrSet)) {
+		void RegisterReceivedCallbackEvent(void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool requestData)) {
 			_pProlCallback = pProtocolCpltCallback;
 		}
 

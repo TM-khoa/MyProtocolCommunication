@@ -22,11 +22,6 @@ extern "C" {
 
 typedef uint8_t ProtocolID;
 
-typedef enum GetSetFlag {
-	GET_SET_NONE,
-	SET_DATA_TO_THIS_DEVICE,
-	GET_DATA_FROM_THIS_DEVICE,
-} GetSetFlag;
 
 typedef enum ProtocolErrorCode {
 	PROTOCOL_ERR_OK,
@@ -47,7 +42,7 @@ typedef struct FrameData {
 	uint8_t payloadLength;
 	uint8_t totalLength;
 	uint16_t crc16;
-	GetSetFlag getSetFlag;
+	bool requestData;
 	ProtocolID protocolID;
 } FrameData;
 
@@ -57,20 +52,20 @@ typedef struct ArgumentOfProtocolList_t {
 } ArgumentOfProtocolList_t;
 
 #define PROTOCOL_TOTAL_LENGTH_FIELD_SIZE 1
-#define PROTOCOL_GET_SET_FIELD_SIZE 1
+#define PROTOCOL_REQUEST_DATA_FIELD_SIZE 1
 #define PROTOCOL_ID_FIELD_SIZE 1
-#define PROTOCOL_PAYLOAD_LENGTH(TOTAL_LENGTH) ((TOTAL_LENGTH) - PROTOCOL_TOTAL_LENGTH_FIELD_SIZE - PROTOCOL_ID_FIELD_SIZE - PROTOCOL_GET_SET_FIELD_SIZE - PROTOCOL_CRC_FIELD_SIZE)
+#define PROTOCOL_PAYLOAD_LENGTH(TOTAL_LENGTH) ((TOTAL_LENGTH) - PROTOCOL_TOTAL_LENGTH_FIELD_SIZE - PROTOCOL_ID_FIELD_SIZE - PROTOCOL_REQUEST_DATA_FIELD_SIZE - PROTOCOL_CRC_FIELD_SIZE)
 #define PROTOCOL_CRC_FIELD_SIZE	2
 
 #define PROTOCOL_TOTAL_LENGTH_FIELD 0
 #define PROTOCOL_ID_FIELD (PROTOCOL_TOTAL_LENGTH_FIELD + PROTOCOL_TOTAL_LENGTH_FIELD_SIZE)
-#define PROTOCOL_GET_SET_FIELD (PROTOCOL_ID_FIELD + PROTOCOL_ID_FIELD_SIZE)
-#define PROTOCOL_PAYLOAD_FIELD (PROTOCOL_GET_SET_FIELD + PROTOCOL_GET_SET_FIELD_SIZE)
+#define PROTOCOL_REQUEST_DATA_FIELD (PROTOCOL_ID_FIELD + PROTOCOL_ID_FIELD_SIZE)
+#define PROTOCOL_PAYLOAD_FIELD (PROTOCOL_REQUEST_DATA_FIELD + PROTOCOL_REQUEST_DATA_FIELD_SIZE)
 #define PROTOCOL_CRC16_FIELD(_DATASIZE_) (PROTOCOL_PAYLOAD_FIELD + (_DATASIZE_))
 
-#define PROTOCOL_TOTAL_LENGTH(_DATASIZE_) (PROTOCOL_ID_FIELD_SIZE + PROTOCOL_TOTAL_LENGTH_FIELD_SIZE + PROTOCOL_GET_SET_FIELD_SIZE + (_DATASIZE_) + PROTOCOL_CRC_FIELD_SIZE)
+#define PROTOCOL_TOTAL_LENGTH(_DATASIZE_) (PROTOCOL_ID_FIELD_SIZE + PROTOCOL_TOTAL_LENGTH_FIELD_SIZE + PROTOCOL_REQUEST_DATA_FIELD_SIZE + (_DATASIZE_) + PROTOCOL_CRC_FIELD_SIZE)
 
-typedef void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, GetSetFlag getOrSet);
+typedef void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool getOrSet);
 typedef void (*pProtocolErrorCallback)(ProtocolErrorCode err);
 
 class Protocol {
@@ -176,9 +171,10 @@ class Protocol {
 		 * @brief Tự động tạo khung truyền dựa trên mã định dạng đã cho.
 		 * @note Chỉ dùng khi mã định dạng đã được đăng ký đối số dùng hàm RegisterArgument.
 		 * @param protocolID Mã định dạng khung truyền.
-		 * @param getSetFlag Cờ báo yêu cầu đối tượng sẽ nhận dữ liệu hay phản hồi dữ liệu về.
+		 * @param requestData false:đối tượng nhận dữ liệu, true: yêu cầu đối tượng phản hồi dữ liệu về.
+		 * @return FrameData
 		 */
-		void MakeFrame(ProtocolID protocolID, GetSetFlag getSetFlag) {
+		FrameData MakeFrame(ProtocolID protocolID, bool requestData) {
 			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(argID[protocolID].sizeArgument);
 			if (_fd.totalLength > _txBufSize)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
@@ -187,81 +183,84 @@ class Protocol {
 			if (_pTxBuffer == NULL)
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
 			memset(_pTxBuffer, 0, _txBufSize);
-			_fd.payloadLength = argID[protocolID].sizeArgument;
-			_fd.getSetFlag = getSetFlag;
+			if(requestData == true) _fd.payloadLength = 0; 
+			else _fd.payloadLength = argID[protocolID].sizeArgument;
+			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(_fd.payloadLength);
 			_fd.protocolID = protocolID;
+			_fd.requestData = requestData;
 			*(_pTxBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = _fd.totalLength; // first byte of frame is data length
-			*(_pTxBuffer + PROTOCOL_ID_FIELD) = (uint8_t) protocolID; // The second byte is command list
-			*(_pTxBuffer + PROTOCOL_GET_SET_FIELD) = (uint8_t) getSetFlag; // Third byte is get or set flag
-			memcpy(_pTxBuffer + PROTOCOL_PAYLOAD_FIELD, argID[protocolID].pArg, argID[protocolID].sizeArgument); // Remain bytes are payload data
+			*(_pTxBuffer + PROTOCOL_ID_FIELD) = (uint8_t) _fd.protocolID; // The second byte is command list
+			*(_pTxBuffer + PROTOCOL_REQUEST_DATA_FIELD) = (uint8_t) _fd.requestData; // Third byte is request data from target
+			memcpy(_pTxBuffer + PROTOCOL_PAYLOAD_FIELD, argID[protocolID].pArg, _fd.payloadLength); // Remain bytes are payload data
 			// Calculate CRC16 of _pTxBuffer from begining to payload data
-			uint16_t crc16Result = crc16_Unreflected(_pTxBuffer, PROTOCOL_TOTAL_LENGTH(argID[protocolID].sizeArgument) - PROTOCOL_CRC_FIELD_SIZE, 0);
+			uint16_t crc16Result = crc16_Unreflected(_pTxBuffer, _fd.totalLength - PROTOCOL_CRC_FIELD_SIZE, 0);
 			_fd.crc16 = crc16Result;
 			uint8_t temp[2] = {(uint8_t) (crc16Result >> 8),
 					(uint8_t) (crc16Result & 0xff)};
-			memcpy(_pTxBuffer + PROTOCOL_CRC16_FIELD(argID[protocolID].sizeArgument), temp, 2);
+			memcpy(_pTxBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength), temp, 2);
+			return _fd;
 		}
 
 		/**
 		 * @brief Tạo khung truyền từ đầu vào dữ liệu do người dùng cung cấp với mã định dạng tương ứng
-		 *
 		 * @param payload Dữ liệu cần đóng gói vào khung truyền
 		 * @param sizeOfPayload Kích thước dữ liệu cần đóng gói
 		 * @param protocolID Mã định dạng khung truyền
-		 * @param getSetFlag Cờ báo yêu cầu đối tượng sẽ nhận dữ liệu hay phản hồi dữ liệu về.
+		 * @return FrameData
 		 */
-		void MakeFrame(void *payload, uint16_t sizeOfPayload, ProtocolID protocolID, GetSetFlag getSetFlag) {
+		FrameData MakeFrame(void *payload, uint16_t sizeOfPayload, ProtocolID protocolID) {
 			if (PROTOCOL_TOTAL_LENGTH(sizeOfPayload) > _txBufSize)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
 			if (payload == NULL || _pTxBuffer == NULL)
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
 			memset(_pTxBuffer, 0, _txBufSize);
 			_fd.payloadLength = sizeOfPayload;
-			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(sizeOfPayload);
-			_fd.getSetFlag = getSetFlag;
+			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(_fd.payloadLength);
 			_fd.protocolID = protocolID;
-			*(_pTxBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = PROTOCOL_TOTAL_LENGTH(sizeOfPayload); // first byte of frame is total length
-			*(_pTxBuffer + PROTOCOL_ID_FIELD) = (uint8_t) protocolID; // The second byte is command list
-			*(_pTxBuffer + PROTOCOL_GET_SET_FIELD) = (uint8_t) getSetFlag; // Third byte is get or set flag
-			memcpy(_pTxBuffer + PROTOCOL_PAYLOAD_FIELD, payload, sizeOfPayload); // Remain bytes are payload data
+			_fd.requestData = false;
+			*(_pTxBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = _fd.totalLength; // first byte of frame is total length
+			*(_pTxBuffer + PROTOCOL_ID_FIELD) = (uint8_t) _fd.protocolID; // The second byte is command list
+			*(_pTxBuffer + PROTOCOL_REQUEST_DATA_FIELD) =  _fd.requestData; // Third byte is request data from target
+			memcpy(_pTxBuffer + PROTOCOL_PAYLOAD_FIELD, payload, _fd.payloadLength); // Remain bytes are payload data
 			// Calculate CRC16 of _pTxBuffer from begining to payload data
-			// Calculate CRC16 of _pTxBuffer from begining to payload data
-			uint16_t crc16Result = crc16_Unreflected(_pTxBuffer, PROTOCOL_TOTAL_LENGTH(sizeOfPayload) - PROTOCOL_CRC_FIELD_SIZE, 0);
+			uint16_t crc16Result = crc16_Unreflected(_pTxBuffer, _fd.totalLength - PROTOCOL_CRC_FIELD_SIZE, 0);
 			_fd.crc16 = crc16Result;
 			uint8_t temp[2] = {(uint8_t) (crc16Result >> 8),
 					(uint8_t) (crc16Result & 0xff)};
-			memcpy(_pTxBuffer + PROTOCOL_CRC16_FIELD(sizeOfPayload), temp, 2);
+			memcpy(_pTxBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength), temp, 2);
+			return _fd;
 		}
 
 		/**
-		 * @brief Tạo ra khung truyền dữ liệu và chứa tại bộ đệm đầu ra
+		 * @brief Tạo ra khung truyền dữ liệu và chứa tại bộ đệm đầu ra từ bộ đệm đầu vào
 		 * @param outputBuffer Con trỏ trỏ tới địa chỉ bộ đệm đầu ra
 		 * @param sizeOfOutputBuffer Kích thước bộ đệm đầu ra chứa khung truyền
 		 * @param payload Dữ liệu cần đóng gói vào khung truyền
 		 * @param sizeOfPayload Kích thước dữ liệu cần đóng gói
 		 * @param protocolID Mã định dạng khung truyền
-		 * @param getSetFlag Cờ báo yêu cầu đối tượng sẽ nhận dữ liệu hay phản hồi dữ liệu về.
+		 * @return FrameData
 		 */
-		void MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID, GetSetFlag getSetFlag) {
+		FrameData MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID, bool requestData) {
 			if (PROTOCOL_TOTAL_LENGTH(sizeOfPayload) > sizeOfOutputBuffer)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
 			if (payload == NULL || outputBuffer == NULL)
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
 			memset(outputBuffer, 0, sizeOfOutputBuffer);
-			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(sizeOfPayload);
-			_fd.protocolID = protocolID;
-			_fd.getSetFlag = getSetFlag;
 			_fd.payloadLength = sizeOfPayload;
-			*(outputBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = PROTOCOL_TOTAL_LENGTH(sizeOfPayload); // first byte of frame is total length
-			*(outputBuffer + PROTOCOL_ID_FIELD) = (uint8_t) protocolID; // The second byte is command list
-			*(outputBuffer + PROTOCOL_GET_SET_FIELD) = (uint8_t) getSetFlag; // Third byte is get or set flag
-			memcpy(outputBuffer + PROTOCOL_PAYLOAD_FIELD, payload, sizeOfPayload); // Remain bytes are payload data
+			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(_fd.payloadLength);
+			_fd.protocolID = protocolID;
+			_fd.requestData = false;
+			*(outputBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = _fd.totalLength; // first byte of frame is total length
+			*(outputBuffer + PROTOCOL_ID_FIELD) = (uint8_t) _fd.protocolID; // The second byte is command list
+			*(outputBuffer + PROTOCOL_REQUEST_DATA_FIELD) = (uint8_t) _fd.requestData; // Third byte is get or set flag
+			memcpy(outputBuffer + PROTOCOL_PAYLOAD_FIELD, payload, _fd.payloadLength); // Remain bytes are payload data
 			// Calculate CRC16 of outputBuffer from begining to payload data
-			uint16_t crc16Result = crc16_Unreflected(outputBuffer, PROTOCOL_TOTAL_LENGTH(sizeOfPayload) - PROTOCOL_CRC_FIELD_SIZE, 0);
+			uint16_t crc16Result = crc16_Unreflected(outputBuffer, _fd.totalLength - PROTOCOL_CRC_FIELD_SIZE, 0);
 			_fd.crc16 = crc16Result;
 			uint8_t temp[2] = {(uint8_t) (crc16Result >> 8),
 					(uint8_t) (crc16Result & 0xff)};
-			memcpy(outputBuffer + PROTOCOL_CRC16_FIELD(sizeOfPayload), temp, 2);
+			memcpy(outputBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength), temp, 2);
+			return _fd;
 		}
 
 		uint8_t GetTotalLengthFromFirstCallback() {
@@ -280,14 +279,14 @@ class Protocol {
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
 			_fd.payloadLength = PROTOCOL_PAYLOAD_LENGTH(_fd.totalLength);
 			_fd.protocolID = (ProtocolID) *(_pRxBuffer + PROTOCOL_ID_FIELD);
-			_fd.getSetFlag = (GetSetFlag) *(_pRxBuffer + PROTOCOL_GET_SET_FIELD);
+			_fd.requestData = (bool) *(_pRxBuffer + PROTOCOL_REQUEST_DATA_FIELD);
 			uint32_t crcNibbleByteMSB = *(_pRxBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength)) << 8;
 			uint32_t crcNibbleByteLSB = *(_pRxBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength) + 1);
 			_fd.crc16 = crcNibbleByteMSB | crcNibbleByteLSB;
 			if (!IsPassCRC(_pRxBuffer))
 				JumpToError(PROTOCOL_ERR_CRC_FAIL);
 			if (_pProlCallback != NULL)
-				_pProlCallback(NULL, 0, _fd.protocolID, _fd.getSetFlag);
+				_pProlCallback(NULL, 0, _fd.protocolID, _fd.requestData);
 			else
 				JumpToError(PROTOCOL_ERR_NULL_CALLBACK_FUNCTION);
 		}
@@ -305,14 +304,14 @@ class Protocol {
 			if (PROTOCOL_TOTAL_LENGTH(_fd.payloadLength) != lengthOfFrameData)
 				JumpToError(PROTOCOL_ERR_FRAME_ERROR);
 			_fd.protocolID = (ProtocolID) *(inputBuffer + PROTOCOL_ID_FIELD);
-			_fd.getSetFlag = (GetSetFlag) *(inputBuffer + PROTOCOL_GET_SET_FIELD);
+			_fd.requestData = (bool) *(inputBuffer + PROTOCOL_REQUEST_DATA_FIELD);
 			uint32_t crcNibbleByteMSB = *(inputBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength)) << 8;
 			uint32_t crcNibbleByteLSB = *(inputBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength) + 1);
 			_fd.crc16 = crcNibbleByteMSB | crcNibbleByteLSB;
 			if (!IsPassCRC(inputBuffer))
 				JumpToError(PROTOCOL_ERR_CRC_FAIL);
 			if (_pProlCallback != NULL)
-				_pProlCallback(inputBuffer, lengthOfFrameData, _fd.protocolID, _fd.getSetFlag);
+				_pProlCallback(inputBuffer, lengthOfFrameData, _fd.protocolID, _fd.requestData);
 			else
 				JumpToError(PROTOCOL_ERR_NULL_CALLBACK_FUNCTION);
 		}
@@ -336,7 +335,7 @@ class Protocol {
 		void ResetFrame() {
 			FrameData fdTemp;
 			fdTemp.crc16 = 0;
-			fdTemp.getSetFlag = GET_SET_NONE;
+			fdTemp.requestData = false;
 			fdTemp.payloadLength = 0;
 			fdTemp.protocolID = (ProtocolID) 0, _fd = fdTemp;
 		}
@@ -355,7 +354,7 @@ class Protocol {
 			argID[protocolID].sizeArgument = sizeOfArgument;
 		}
 
-		void RegisterReceivedCallbackEvent(void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, GetSetFlag getOrSet)) {
+		void RegisterReceivedCallbackEvent(void (*pProtocolCpltCallback)(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, ProtocolID protocolID, bool getOrSet)) {
 			_pProlCallback = pProtocolCpltCallback;
 		}
 

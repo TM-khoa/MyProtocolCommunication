@@ -121,8 +121,8 @@ class Protocol {
 		 * @param sizeOfOutputBuffer kích thước bộ đệm (lớn hơn hoặc bằng độ dài payload).
 		 */
 		void GetValueFromPayload(void *outputBuffer, uint8_t sizeOfOutputBuffer) {
-			if (sizeOfOutputBuffer < _fd.payloadLength)
-				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
+			if (sizeOfOutputBuffer != _fd.payloadLength)
+				JumpToError(PROTOCOL_ERR_PAYLOAD_NOT_RECOGNIZE);
 			if (outputBuffer != NULL && _pRxBuffer != NULL)
 				memcpy(outputBuffer, _pRxBuffer + PROTOCOL_PAYLOAD_FIELD, _fd.payloadLength);
 			else {
@@ -159,7 +159,7 @@ class Protocol {
 		 * @param sizeOfOutputBuffer Kích thước bộ đệm dùng để nhận payload.
 		 */
 		void GetValueFromPayload(uint8_t *inputBuffer, uint16_t sizeOfInputBuffer, void *outputBuffer, uint8_t sizeOfOutputBuffer) {
-			if (_fd.payloadLength > sizeOfOutputBuffer || sizeOfInputBuffer < sizeOfOutputBuffer)
+			if (_fd.payloadLength > sizeOfOutputBuffer || sizeOfInputBuffer > sizeOfOutputBuffer)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
 			if (outputBuffer != NULL && inputBuffer != NULL)
 				memcpy(outputBuffer, inputBuffer + PROTOCOL_PAYLOAD_FIELD, _fd.payloadLength);
@@ -179,7 +179,7 @@ class Protocol {
 			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(argID[protocolID].sizeArgument);
 			if (_fd.totalLength > _txBufSize)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
-			if (argID[protocolID].pArg == NULL)
+			if (argID[protocolID].pArg == NULL && requestData == false)
 				JumpToError(PROTOCOL_ERR_REFERENCE_PAYLOAD_NOT_FOUND);
 			if (_pTxBuffer == NULL)
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
@@ -192,7 +192,8 @@ class Protocol {
 			*(_pTxBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = _fd.totalLength; // first byte of frame is data length
 			*(_pTxBuffer + PROTOCOL_ID_FIELD) = (uint8_t) _fd.protocolID; // The second byte is command list
 			*(_pTxBuffer + PROTOCOL_REQUEST_DATA_FIELD) = (uint8_t) _fd.requestData; // Third byte is request data from target
-			memcpy(_pTxBuffer + PROTOCOL_PAYLOAD_FIELD, argID[protocolID].pArg, _fd.payloadLength); // Remain bytes are payload data
+			if(_fd.requestData == false)
+				memcpy(_pTxBuffer + PROTOCOL_PAYLOAD_FIELD, argID[protocolID].pArg, _fd.payloadLength); // Remain bytes are payload data
 			// Calculate CRC16 of _pTxBuffer from begining to payload data
 			uint16_t crc16Result = crc16_Unreflected(_pTxBuffer, _fd.totalLength - PROTOCOL_CRC_FIELD_SIZE, 0);
 			_fd.crc16 = crc16Result;
@@ -247,7 +248,8 @@ class Protocol {
 		FrameData MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID, bool requestData) {
 			if (PROTOCOL_TOTAL_LENGTH(sizeOfPayload) > sizeOfOutputBuffer)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
-			if (payload == NULL || outputBuffer == NULL)
+			// Nếu request data thì không cần payload
+			if ((payload == NULL && requestData == false) || outputBuffer == NULL)
 				JumpToError(PROTOCOL_ERR_STORE_BUFFER_IS_NULL);
 			memset(outputBuffer, 0, sizeOfOutputBuffer);
 			_fd.payloadLength = sizeOfPayload;
@@ -257,7 +259,9 @@ class Protocol {
 			*(outputBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = _fd.totalLength; // first byte of frame is total length
 			*(outputBuffer + PROTOCOL_ID_FIELD) = (uint8_t) _fd.protocolID; // The second byte is command list
 			*(outputBuffer + PROTOCOL_REQUEST_DATA_FIELD) = (uint8_t) _fd.requestData; // Third byte is get or set flag
-			memcpy(outputBuffer + PROTOCOL_PAYLOAD_FIELD, payload, _fd.payloadLength); // Remain bytes are payload data
+			// Trường hợp đặc biệt cần payload là request handshake code, requestData = true và payload != NULL khi, do đó có điều kiện này
+			if(_fd.requestData == false || payload != NULL)
+				memcpy(outputBuffer + PROTOCOL_PAYLOAD_FIELD, payload, _fd.payloadLength); // Remain bytes are payload data
 			// Calculate CRC16 of outputBuffer from begining to payload data
 			uint16_t crc16Result = crc16_Unreflected(outputBuffer, _fd.totalLength - PROTOCOL_CRC_FIELD_SIZE, 0);
 			_fd.crc16 = crc16Result;

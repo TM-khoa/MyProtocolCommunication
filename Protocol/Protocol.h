@@ -232,6 +232,8 @@ class Protocol {
 			return _fd;
 		}
 
+
+
 		/**
 		 * @brief Tạo ra khung truyền dữ liệu và chứa tại bộ đệm đầu ra từ bộ đệm đầu vào
 		 * @param outputBuffer Con trỏ trỏ tới địa chỉ bộ đệm đầu ra
@@ -239,9 +241,10 @@ class Protocol {
 		 * @param payload Dữ liệu cần đóng gói vào khung truyền
 		 * @param sizeOfPayload Kích thước dữ liệu cần đóng gói
 		 * @param protocolID Mã định dạng khung truyền
+		 * @param requestData false:đối tượng nhận dữ liệu, true: yêu cầu đối tượng phản hồi dữ liệu về.
 		 * @return FrameData
 		 */
-		FrameData MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID) {
+		FrameData MakeFrame(uint8_t *outputBuffer, uint16_t sizeOfOutputBuffer, void *payload, uint16_t sizeOfPayload, ProtocolID protocolID, bool requestData) {
 			if (PROTOCOL_TOTAL_LENGTH(sizeOfPayload) > sizeOfOutputBuffer)
 				JumpToError(PROTOCOL_ERR_OUT_OF_BUFFER_SIZE);
 			if (payload == NULL || outputBuffer == NULL)
@@ -250,7 +253,7 @@ class Protocol {
 			_fd.payloadLength = sizeOfPayload;
 			_fd.totalLength = PROTOCOL_TOTAL_LENGTH(_fd.payloadLength);
 			_fd.protocolID = protocolID;
-			_fd.requestData = false;
+			_fd.requestData = requestData;
 			*(outputBuffer + PROTOCOL_TOTAL_LENGTH_FIELD) = _fd.totalLength; // first byte of frame is total length
 			*(outputBuffer + PROTOCOL_ID_FIELD) = (uint8_t) _fd.protocolID; // The second byte is command list
 			*(outputBuffer + PROTOCOL_REQUEST_DATA_FIELD) = (uint8_t) _fd.requestData; // Third byte is get or set flag
@@ -262,6 +265,14 @@ class Protocol {
 					(uint8_t) (crc16Result & 0xff)};
 			memcpy(outputBuffer + PROTOCOL_CRC16_FIELD(_fd.payloadLength), temp, 2);
 			return _fd;
+		}
+
+		FrameData SendRequestHandshakeCode(uint8_t *handshakeCodeBuffer, uint16_t codeLength, ProtocolID handshakeID){
+			return MakeFrame(_pTxBuffer,_txBufSize,handshakeCodeBuffer,codeLength,handshakeID,true);
+		}
+
+		FrameData SendResponseHandshakeCode(uint8_t *handshakeCodeBuffer, uint16_t codeLength, ProtocolID handshakeID){
+			return MakeFrame(_pTxBuffer,_txBufSize,handshakeCodeBuffer,codeLength,handshakeID,false);
 		}
 
 		uint8_t GetTotalLengthFromFirstCallback() {

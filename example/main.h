@@ -10,4 +10,11 @@ typedef enum ProtocolListID {
 	PROTOCOL_ID_ERROR,
 	PROTOCOL_ID_END,
 } ProtocolListID;
+
+typedef struct TestDataStructure_t {
+	int a;
+	float b;
+	char c[16];
+}TestDataStructure_t;
+
 #endif

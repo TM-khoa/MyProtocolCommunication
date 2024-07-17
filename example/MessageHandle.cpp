@@ -17,7 +17,6 @@ int MessageHandle::SendMessage(ProtocolListID id, bool requestData){
     FrameData fd  = Protocol::MakeFrame(id,requestData);
     std::cout << "Virtual send message" <<  std::endl;
     PrintFrameData(fd);
-    Protocol::ResetFrame();
     _isSending = true;
     return 0;
 }

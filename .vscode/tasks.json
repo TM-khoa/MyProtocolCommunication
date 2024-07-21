@@ -7,10 +7,11 @@
             "args": [
                 "-fdiagnostics-color=always",
                 "-I",
-                "..\\Protocol\\Protocol\\",
+                "..\\Protocol\\",
+                "..\\example\\",
                 "-g",
                 "*.c",
-                "..\\Protocol\\Protocol\\*.c",
+                "..\\Protocol\\*.c",
                 "-o",
                 "${fileDirname}\\${fileBasenameNoExtension}.exe"
             ],

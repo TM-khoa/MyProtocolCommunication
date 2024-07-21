@@ -228,11 +228,11 @@ void SimulatePeripheralSendMessage(){
     MessageHandle *targetMesg = NULL;
     if(Device1.GetSendingStatus()){
         targetMesg = &Device1;
-        cout << "Device1--->" << "\t";
+        // cout << "Device1--->" << "\t";
     }
     else if(Device2.GetSendingStatus()){
         targetMesg = &Device2;
-        cout << "Device2--->" << "\t";
+        // cout << "Device2--->" << "\t";
     }
     else return;
     fd = targetMesg->GetFrameDataInfo();
@@ -243,7 +243,7 @@ void SimulatePeripheralSendMessage(){
     memcpy(periphBuffer, targetMesg->GetAddressTxBuffer() + i, 1);
     // Gửi dữ liệu bộ đệm ngoại vi vào bộ đệm test để Device2 nhận
     memcpy(testBuffer + i, periphBuffer, 1);
-    cout << "Sending byte: " << (int)i << " value: 0x" << std::hex << (int)*(targetMesg->GetAddressTxBuffer() + i)<< endl;
+    // cout << "Sending byte: " << std::dec  << (int)(i + 1) << ". Value: 0x" << std::hex << (int)*(targetMesg->GetAddressTxBuffer() + i)<< endl;
     i++;
     // Nếu đủ độ dài thì đã kết thúc frame truyền, thực hiện xóa bộ đệm _txBuffer
     if(i == fd.totalLength) {
@@ -266,11 +266,11 @@ void SimulatePeripheralReceiveMessage(){
     // Nếu bên gửi là device 1 thì bên nhận phải trỏ tới class của device 2
     if(Device1.GetSendingStatus()){
         targetMesg = &Device2;
-        cout << "Device2--->"  << "\t";
+        // cout << "Device2--->"  << "\t";
     }
     else if(Device2.GetSendingStatus()){
         targetMesg = &Device1;
-        cout << "Device1--->"  << "\t";
+        // cout << "Device1--->"  << "\t";
     }
     else return;
     fd = targetMesg->GetFrameDataInfo();
@@ -281,13 +281,14 @@ void SimulatePeripheralReceiveMessage(){
         // Set tổng độ dài frame truyền vào biến private FrameData trong class Protocol
         targetMesg->SetTotalLength(fd.totalLength);
         memcpy(targetMesg->GetAddressRxBuffer() + i, periphBuffer, 1);
-        cout << "Receive byte: " << (int)i << " total length: " << std::dec << (int)fd.totalLength << endl;
+        // cout << "TestBug" << endl;
+        // cout << "Receive byte: " << std::dec << (int)(i + 1) << ". Total length: " << std::dec << (int)fd.totalLength << endl;
         i++;
     } 
     else {
         memcpy(periphBuffer,testBuffer + i, 1);
         memcpy(targetMesg->GetAddressRxBuffer() + i, periphBuffer, 1);
-        cout << "Receive byte: " << (int)i << " value: 0x" << std::hex << (int)*(targetMesg->GetAddressRxBuffer() + i) << endl;
+        // cout << "Receive byte: " << std::dec << (int)(i + 1) << ". Value: 0x" << std::hex << (int)*(targetMesg->GetAddressRxBuffer() + i) << endl;
         i++;
         // Nếu đủ độ dài thì đã kết thúc frame truyền, thực hiện xóa bộ đệm _txBuffer
         if(i == fd.totalLength) {
@@ -318,7 +319,7 @@ void CommunicationProcess(){
         cout << "********************CONNECTION ESTABLISHED*********************" << endl;
         cout << "**********************BEGIN COMMUNICATION***********************" << endl;
         Device1.SendMessage((void*)&a, sizeof(uint8_t), PROTOCOL_ID_1);
-        cout << "Device 1 send a" << endl;
+        cout << "Device 1 send value 'a'" << endl;
         processStep ++;
         break;
     case 2:
@@ -327,7 +328,7 @@ void CommunicationProcess(){
     case 3: // Device 2 truyền số float b
         cout << "**********************NEXT TRANSFER***********************" << endl;
         Device2.SendMessage((void*)&b,sizeof(float),PROTOCOL_ID_2);
-        cout << "Device 2 send b" << endl;
+        cout << "Device 2 send value 'b'" << endl;
         processStep ++;
         break;
     case 4:
@@ -348,6 +349,8 @@ void CommunicationProcess(){
 }
 
 int main(void){
+    cout << "********************TEST HANDSHAKE*********************" << endl;
+    cout << "Device 1 is requesting handshake from device 2" << endl;
     Device1.RequestHandshake();
     while(1) {
         CommunicationProcess();

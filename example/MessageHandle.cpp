@@ -5,11 +5,11 @@
 void PrintFrameData(FrameData fd){
     
     // ép kiểu int để cout in ra dạng số thay vì ký tự ASCII
-    std::cout << "\t" << "totalLength:" << (int)fd.totalLength << std::endl;
-    std::cout << "\t" << "protocolID:" << (int)fd.protocolID << std::endl;
-    std::cout << "\t" << "requestData:" << (int)fd.requestData << std::endl;
-    std::cout << "\t" << "payload length:" << (int)fd.payloadLength << std::endl;
-    std::cout << "\t" << "crc16:0x" << std::hex << fd.crc16 << std::endl;
+    // std::cout << "\t" << "totalLength:" << (int)fd.totalLength << std::endl;
+    // std::cout << "\t" << "protocolID:" << (int)fd.protocolID << std::endl;
+    // std::cout << "\t" << "requestData:" << (int)fd.requestData << std::endl;
+    // std::cout << "\t" << "payload length:" << (int)fd.payloadLength << std::endl;
+    // std::cout << "\t" << "crc16:0x" << std::hex << fd.crc16 << std::endl;
 }
 
 int MessageHandle::SendMessage(ProtocolListID id, bool requestData){

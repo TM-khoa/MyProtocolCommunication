@@ -12,6 +12,12 @@ void PrintFrameData(FrameData fd){
     // std::cout << "\t" << "crc16:0x" << std::hex << fd.crc16 << std::endl;
 }
 
+/**
+ * @brief Gửi yêu cầu dữ liệu từ bên nhận
+ * @param id Mã nhận dạng khung truyền
+ * @param requestData true nếu yêu cầu bên nhận phản hồi thông tin
+ * @return 
+ */
 int MessageHandle::SendMessage(ProtocolListID id, bool requestData){
     if(_isSending == true) return 1;
     FrameData fd  = Protocol::MakeFrame(id,requestData);
@@ -21,6 +27,13 @@ int MessageHandle::SendMessage(ProtocolListID id, bool requestData){
     return 0;
 }
 
+/**
+ * @brief Gửi payload đến bên nhận 
+ * @param payload Con trỏ trỏ tới dữ liệu cần gửi
+ * @param sizeOfPayload Kích thước dữ liệu
+ * @param id Mã nhận dạng khung truyền
+ * @return 0 nếu gửi thành công, 1 nếu đang bận
+ */
 int MessageHandle::SendMessage(void* payload, uint16_t sizeOfPayload, ProtocolListID id){
     if(_isSending == true) return 1;
     FrameData fd  = Protocol::MakeFrame(payload,sizeOfPayload,id);

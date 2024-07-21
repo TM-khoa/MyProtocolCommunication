@@ -329,6 +329,7 @@ class Protocol {
 			fdTemp.crc16 = 0;
 			fdTemp.requestData = false;
 			fdTemp.payloadLength = 0;
+			fdTemp.totalLength = 0;
 			fdTemp.protocolID = (ProtocolID) 0, _fd = fdTemp;
 		}
 

@@ -126,7 +126,7 @@ void Device2GetData(FrameData fd){
                 dataTest.a = -34000;
                 dataTest.b = -58.33;
                 memset(dataTest.c,0,sizeof(dataTest.c));
-                memcpy(dataTest.c,"SpiritBoi",strlen("SpiritBoi"));
+                memcpy(dataTest.c,"Test String",strlen("Test String"));
                 Device2.SendMessage((void*)&dataTest,sizeof(TestDataStructure_t),(ProtocolListID)fd.protocolID);
                 std::cout << "Device2 response value dataTest "  << std::endl;
                 break;
